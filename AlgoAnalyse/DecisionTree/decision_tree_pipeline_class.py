@@ -135,14 +135,20 @@ class DiabetesDecisionTreePipeline:
     # -------------------------------------------------------------
     # 7) Baum visualisieren
     # -------------------------------------------------------------
-    def plot_tree(self, max_depth=None, figsize=(15, 10)):
+    def plot_tree(self, max_depth=5, figsize=(15, 10), title=None):
         plt.figure(figsize=figsize)
+
         plot_tree(
             self.model,
             feature_names=self.X.columns,
             filled=True,
-            max_depth=max_depth,
+            max_depth=max_depth,  # <-- HIER wird die Tiefe begrenzt
         )
+
+        if title is None:
+            title = f"Decision Tree (max_depth={max_depth if max_depth else 'full'})"
+
+        plt.title(title)
         plt.show()
 
     # -------------------------------------------------------------
@@ -160,6 +166,7 @@ class DiabetesDecisionTreePipeline:
     # -------------------------------------------------------------
     # 9) Grid Search Light (max_depth × min_samples_split)
     # -------------------------------------------------------------
+    '''
     def grid_search(self, depth_list, split_list):
         results = []
 
@@ -191,6 +198,7 @@ class DiabetesDecisionTreePipeline:
         self.fit()
 
         return df_results
+    '''
     # -------------------------------------------------------------
     # 10) Cross Value Score für stabilere Evaluation
     # -------------------------------------------------------------

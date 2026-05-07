@@ -2,7 +2,11 @@ from decision_tree_pipeline_class import DiabetesDecisionTreePipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_val_score
+from sklearn import tree
+import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 general_config = {
@@ -10,10 +14,12 @@ general_config = {
     "target_col": "Diabetes",
     "test_size": 0.2,
     "random_state": 42,
-    "max_depth": None,
-    "min_samples_split": 2,
+    "max_depth": 5,
+    "min_samples_split": 20,
     "criterion": "gini",
-    "verbose": True
+    "verbose": True,
+    "plots_enable": False
+
 }
 
 def scenario_all_features():
@@ -40,6 +46,9 @@ def scenario_all_features():
         data_path= general_config["data_path"],
         test_size=general_config["test_size"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -49,6 +58,9 @@ def scenario_all_features():
 
     pipeline.init_model()
     pipeline.fit()
+
+    if general_config["plots_enable"]:
+        pipeline.plot_tree(title="Baseline (alle Features)")
 
     acc = pipeline.evaluate()
     #acc = result["accuracy"]
@@ -81,6 +93,9 @@ def scenario_top_features():
         data_path= general_config["data_path"],
         test_size=general_config["test_size"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -93,6 +108,9 @@ def scenario_top_features():
     pipeline.train_test_split()
     pipeline.init_model()
     pipeline.fit()
+
+    if general_config["plots_enable"]:
+        pipeline.plot_tree(title="Top-Features Baum")
 
     acc = pipeline.evaluate()
     #acc = result["accuracy"]
@@ -127,6 +145,9 @@ def scenario_cross_validation():
     pipeline = DiabetesDecisionTreePipeline(
         data_path= general_config["data_path"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -136,6 +157,17 @@ def scenario_cross_validation():
     pipeline.init_model(max_depth=5, min_samples_split=20)
 
     scores = pipeline.cross_validate(cv=5)
+
+    if general_config["plots_enable"]:
+        plt.figure(figsize=(6, 4))
+        plt.bar(range(1, len(scores) + 1), scores)
+        plt.xlabel("Fold")
+        plt.ylabel("Accuracy")
+        plt.title("Cross-Validation Scores (5-Fold)")
+        plt.ylim(0, 1)
+        plt.grid(True, axis="y")
+        plt.show()
+
     mean_score = scores.mean()
 
     #print("\n[test_cross_validation] CV Accuracy:", mean_score)
@@ -172,6 +204,8 @@ def scenario_entropy():
         data_path= general_config["data_path"],
         test_size=general_config["test_size"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
         criterion="entropy",   # ntropy wählen
         verbose = general_config["verbose"]
     )
@@ -182,6 +216,8 @@ def scenario_entropy():
 
     pipeline.init_model()
     pipeline.fit()
+    if general_config["plots_enable"]:
+        pipeline.plot_tree(title="Decision Tree – Entropy")
 
     acc = pipeline.evaluate()
     return float(acc)
@@ -204,6 +240,9 @@ def scenario_grid_search_tree():
     pipeline = DiabetesDecisionTreePipeline(
         data_path=general_config["data_path"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -228,8 +267,26 @@ def scenario_grid_search_tree():
 
     grid.fit(pipeline.X, pipeline.y)
 
+    results = pd.DataFrame(grid.cv_results_)
+
+    if general_config["plots_enable"]:
+        plt.figure(figsize=(8, 4))
+        sns.lineplot(
+            data=results,
+            x="param_max_depth",
+            y="mean_test_score",
+            marker="o"
+        )
+        plt.xlabel("max_depth")
+        plt.ylabel("Accuracy")
+        plt.title("Grid Search: Einfluss von max_depth")
+        plt.grid(True)
+        plt.show()
+
     best_model = grid.best_estimator_
     best_score = grid.best_score_
+
+
 
     pipeline._log(f"Best params: {grid.best_params_}")
     return float(best_score)
@@ -248,6 +305,9 @@ def scenario_pruning():
     pipeline = DiabetesDecisionTreePipeline(
         data_path=general_config["data_path"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -267,6 +327,18 @@ def scenario_pruning():
         )
         score = cross_val_score(tree, pipeline.X, pipeline.y, cv=5, scoring="accuracy").mean()
         scores.append((alpha, score))
+
+    if general_config["plots_enable"]:
+        alphas = [a for a, s in scores]
+        accs = [s for a, s in scores]
+
+        plt.figure(figsize=(8, 4))
+        plt.plot(alphas, accs, marker="o")
+        plt.xlabel("ccp_alpha")
+        plt.ylabel("Accuracy")
+        plt.title("Pruning: Accuracy über verschiedene Alpha-Werte")
+        plt.grid(True)
+        plt.show()
 
     best_alpha, best_score = max(scores, key=lambda x: x[1])
     return float(best_score)
@@ -290,10 +362,12 @@ def scenario_pruning_fast():
     - stabile Accuracy-Schätzung
     - findet den besten Pruning-Parameter (ccp_alpha)
     """
-
     pipeline = DiabetesDecisionTreePipeline(
         data_path=general_config["data_path"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -310,6 +384,7 @@ def scenario_pruning_fast():
 
     best_score = -1
     best_alpha = None
+    scores = []  #Liste für Plot
 
     # 3) Schnelle CV (cv=3 statt cv=5)
     for alpha in ccp_alphas:
@@ -318,17 +393,32 @@ def scenario_pruning_fast():
             ccp_alpha=alpha
         )
         score = cross_val_score(tree, pipeline.X, pipeline.y, cv=3, scoring="accuracy").mean()
+        scores.append((alpha, score))  # <-- für Plot merken
 
         if score > best_score:
             best_score = score
             best_alpha = alpha
 
-    # Optional: Logging
+    # Plot: Accuracy über Alpha
+    if general_config["plots_enable"]:
+        alphas = [a for a, s in scores]
+        accs = [s for a, s in scores]
+
+        plt.figure(figsize=(8, 4))
+        plt.plot(alphas, accs, marker="o")
+        plt.xlabel("ccp_alpha")
+        plt.ylabel("Accuracy")
+        plt.title("Pruning (schnell): Accuracy über verschiedene Alpha-Werte")
+        plt.grid(True)
+        plt.show()
+
+    # Logging
     pipeline._log(f"Bestes Alpha: {best_alpha}")
     pipeline._log(f"Bester Score: {best_score}")
 
-    # 4) Rückgabe des besten Scores
-    return best_score
+    return float(best_score)
+
+
 
 def scenario_pruning_fast_with_best_alpha():
     """
@@ -349,6 +439,9 @@ def scenario_pruning_fast_with_best_alpha():
     pipeline = DiabetesDecisionTreePipeline(
         data_path=general_config["data_path"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -358,6 +451,17 @@ def scenario_pruning_fast_with_best_alpha():
     pipeline.init_model(ccp_alpha=best_alpha)
 
     scores = cross_val_score(pipeline.model, pipeline.X, pipeline.y, cv=5, scoring="accuracy")
+
+    if general_config["plots_enable"]:
+        plt.figure(figsize=(6, 4))
+        plt.bar(range(1, len(scores) + 1), scores)
+        plt.xlabel("Fold")
+        plt.ylabel("Accuracy")
+        plt.title(f"CV Scores mit best_alpha={best_alpha:.5f}")
+        plt.ylim(0, 1)
+        plt.grid(True, axis="y")
+        plt.show()
+
 
     return float(scores.mean())
 
@@ -378,6 +482,9 @@ def find_best_alpha():
     pipeline = DiabetesDecisionTreePipeline(
         data_path=general_config["data_path"],
         random_state=general_config["random_state"],
+        max_depth=general_config["max_depth"],
+        min_samples_split=general_config["min_samples_split"],
+        criterion=general_config["criterion"],
         verbose=general_config["verbose"]
     )
 
@@ -448,13 +555,25 @@ def choose_best_test_variant(test_config):
 
 if __name__ == "__main__":
     test_config ={
-        # "all_features": scenario_all_features,
-        # "top_features": scenario_top_features,
+        "all_features": scenario_all_features,
+        "top_features": scenario_top_features,
         "cross_validation": scenario_cross_validation,
-        # "entropy": scenario_entropy,
+         "entropy": scenario_entropy,
         "grid_search_tree": scenario_grid_search_tree,  # Dauert länger
         # "pruning": scenario_pruning, # Dauert sehr lange
-        # "pruning_fast": scenario_pruning_fast,
+        "pruning_fast": scenario_pruning_fast,
         "pruning_fast_with_best_alpha": scenario_pruning_fast_with_best_alpha
     }
     choose_best_test_variant(test_config)
+
+    '''
+    Analyse Phase 1 abgeschlossen
+    Nach der Ausführung aller Scenarien, hat sich gezeigt, 
+    das grid_search_tree die besten ergebnisse liefert.
+    Mit diesem könnte man jetzt weitere analysen durchführen.
+    Dazu fehlt leider die Zeit.
+    
+    Daher wird final nur der Algorithmus der die besten Ergebnisse liefert
+    hier nochmal seperat ausgeführt und das Ergebnis doklumentiert
+    '''
+    scenario_grid_search_tree()
