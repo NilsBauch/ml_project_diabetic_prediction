@@ -15,6 +15,7 @@ class DiabetesDecisionTreePipeline:
         random_state=42,
         max_depth=None,
         min_samples_split=2,
+        min_samples_leaf=1,
         criterion="gini",
         ccp_alpha=0.0,
         verbose=True
@@ -25,6 +26,7 @@ class DiabetesDecisionTreePipeline:
         self.random_state = random_state
         self.max_depth = max_depth
         self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
         self.criterion = criterion
         self.ccp_alpha = ccp_alpha
         self.verbose = verbose
@@ -76,11 +78,13 @@ class DiabetesDecisionTreePipeline:
     # -------------------------------------------------------------
     # 4) Modell initialisieren & trainieren
     # -------------------------------------------------------------
-    def init_model(self, max_depth=None, min_samples_split=None, criterion=None, ccp_alpha=None):
+    def init_model(self, max_depth=None, min_samples_split=None, min_samples_leaf=None, criterion=None, ccp_alpha=None):
         if max_depth is not None:
             self.max_depth = max_depth
         if min_samples_split is not None:
             self.min_samples_split = min_samples_split
+        if min_samples_leaf is not None:
+            self.min_samples_leaf = min_samples_leaf
         if criterion is not None:
             self.criterion = criterion
         if ccp_alpha is not None:
@@ -89,6 +93,7 @@ class DiabetesDecisionTreePipeline:
         self.model = DecisionTreeClassifier(
             max_depth=self.max_depth,
             min_samples_split=self.min_samples_split,
+            min_samples_leaf=self.min_samples_leaf,
             criterion=self.criterion,
             random_state=self.random_state,
             ccp_alpha=self.ccp_alpha

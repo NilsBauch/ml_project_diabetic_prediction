@@ -2,7 +2,6 @@ from decision_tree_pipeline_class import DiabetesDecisionTreePipeline
 from sklearn.model_selection import GridSearchCV
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_val_score
-from sklearn import tree
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,9 +17,12 @@ general_config = {
     "min_samples_split": 20,
     "criterion": "gini",
     "verbose": True,
-    "plots_enable": False
-
+    "plots_enable": False,
+    "state_of_test" : "Final_Decision" # "Analysis"
 }
+
+
+
 
 def scenario_all_features():
     """
@@ -222,7 +224,7 @@ def scenario_entropy():
     acc = pipeline.evaluate()
     return float(acc)
 
-def scenario_grid_search_tree():
+def scenario_grid_search_tree(return_all=False):
     """
     Führt eine Grid‑Search für den Decision Tree durch.
 
@@ -235,7 +237,8 @@ def scenario_grid_search_tree():
         im Durchschnitt die höchste Accuracy erreicht.
 
     Rückgabe:
-        Die beste gefundene Accuracy (float).
+        Die beste gefundene Accuracy (float) oder
+        (score, params, model, feature_importances) wenn return_all=True.
     """
     pipeline = DiabetesDecisionTreePipeline(
         data_path=general_config["data_path"],
@@ -285,11 +288,27 @@ def scenario_grid_search_tree():
 
     best_model = grid.best_estimator_
     best_score = grid.best_score_
+    best_params = grid.best_params_
 
+    # ---------------------------------------------------------
+    # NEU: Feature Importances aus dem besten Modell extrahieren
+    # ---------------------------------------------------------
+    feature_importances = pd.Series(
+        best_model.feature_importances_,
+        index=pipeline.X.columns
+    ).sort_values(ascending=False)
 
+    pipeline._log("\nWichtigste Features (Grid Search Modell):")
+    pipeline._log(feature_importances)
 
-    pipeline._log(f"Best params: {grid.best_params_}")
+    # ---------------------------------------------------------
+    # Rückgabe erweitern
+    # ---------------------------------------------------------
+    if return_all:
+        return best_score, best_params, best_model, feature_importances
+
     return float(best_score)
+
 
 def scenario_pruning():
     """
@@ -551,20 +570,64 @@ def choose_best_test_variant(test_config):
     return best, results
 
 
+def build_pipeline_from_best_params(best_params):
+    pipeline = DiabetesDecisionTreePipeline(
+        data_path = general_config["data_path"],
+        random_state = general_config["random_state"],
+        max_depth = best_params.get("max_depth"),
+        min_samples_split = best_params.get("min_samples_split"),
+        min_samples_leaf = best_params.get("min_samples_leaf"),
+        criterion=best_params.get("criterion"),
+        verbose=True
+    )
 
+    pipeline.load_data()
+    pipeline.split_features_target()
+    pipeline.train_test_split()
+
+    # Überschreibe mit wichtigen Parametern
+    pipeline.init_model(
+        max_depth = best_params.get("max_depth"),
+        min_samples_split=best_params.get("min_samples_split"),
+        min_samples_leaf=best_params.get("min_samples_leaf", 1),
+        criterion=best_params.get("criterion")
+    )
+
+    pipeline.fit()
+    return pipeline
+
+def print_final_summary(score, params, importances):
+    print("\n" + "="*60)
+    print("                FINALE MODELL-ZUSAMMENFASSUNG")
+    print("="*60)
+
+    print("\nBeste Accuracy (CV-basiert):")
+    print(f"  {score:.4f}")
+
+    print("\nBeste Hyperparameter:")
+    for k, v in params.items():
+        print(f"  {k:20s}: {v}")
+
+    print("\nWichtigste Features:")
+    print(importances.head(10).to_string())
+
+    print("\n" + "="*60)
+    print("                ENDE DER ZUSAMMENFASSUNG")
+    print("="*60)
 
 if __name__ == "__main__":
-    test_config ={
-        "all_features": scenario_all_features,
-        "top_features": scenario_top_features,
-        "cross_validation": scenario_cross_validation,
-         "entropy": scenario_entropy,
-        "grid_search_tree": scenario_grid_search_tree,  # Dauert länger
-        # "pruning": scenario_pruning, # Dauert sehr lange
-        "pruning_fast": scenario_pruning_fast,
-        "pruning_fast_with_best_alpha": scenario_pruning_fast_with_best_alpha
-    }
-    choose_best_test_variant(test_config)
+    if general_config["state_of_test"] == "Analysis":
+        test_config ={
+            #"all_features": scenario_all_features,
+            #"top_features": scenario_top_features,
+            #"cross_validation": scenario_cross_validation,
+            #"entropy": scenario_entropy,
+            "grid_search_tree": scenario_grid_search_tree,  # Dauert länger
+            # "pruning": scenario_pruning, # Dauert sehr lange
+            #"pruning_fast": scenario_pruning_fast,
+            #"pruning_fast_with_best_alpha": scenario_pruning_fast_with_best_alpha
+        }
+        #choose_best_test_variant(test_config)
 
     '''
     Analyse Phase 1 abgeschlossen
@@ -576,4 +639,46 @@ if __name__ == "__main__":
     Daher wird final nur der Algorithmus der die besten Ergebnisse liefert
     hier nochmal seperat ausgeführt und das Ergebnis doklumentiert
     '''
-    scenario_grid_search_tree()
+    '''
+    if general_config["state_of_test"] == "Final_Decision":
+        #  Grid Search erneut ausführen, aber diesmal mit return_all=True um die besten Parameter zu bekopenn
+        score, params, model, importances = scenario_grid_search_tree(return_all=True)
+
+        print("\nBeste Parameter:", params)
+        print("Beste Accuracy:", score)
+
+        # Pipeline mit besten Parametern bauen
+        pipeline_best = build_pipeline_from_best_params(params)
+
+        # Evaluieren
+        pipeline_best.evaluate()
+
+        #  Baum plotten
+        pipeline_best.plot_tree(title="Best Model (Grid Search)")
+
+        # Feature Importance
+        importances.head().plot(kind="barh", figsize=(8, 6))
+        plt.title("Feature Wichtigkeit (Grid Search Modell)")
+        plt.show()
+        '''
+    if general_config["state_of_test"] == "Final_Decision":
+
+        score, params, model, importances = scenario_grid_search_tree(return_all=True)
+
+        # Pipeline mit besten Parametern bauen
+        pipeline_best = build_pipeline_from_best_params(params)
+
+        # Evaluieren
+        pipeline_best.evaluate()
+
+        # Plots
+        if general_config["plots_enable"]:
+            pipeline_best.plot_tree(title="Best Model (Grid Search)")
+            importances.head().plot(kind="barh", figsize=(8, 6))
+            plt.title("Feature Wichtigkeit (Grid Search Modell)")
+            plt.show()
+
+        # Finale Zusammenfassung
+        print_final_summary(score, params, importances)
+
+
